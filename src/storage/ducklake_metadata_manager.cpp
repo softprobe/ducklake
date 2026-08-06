@@ -1,4 +1,9 @@
 #include "storage/ducklake_metadata_manager.hpp"
+<<<<<<< HEAD
+=======
+#include "duckdb/common/file_system.hpp"
+#include "functions/ducklake_table_functions.hpp"
+>>>>>>> 4ab9b124 (Add newer_than option to ducklake_merge_adjacent_files)
 #include "storage/ducklake_transaction.hpp"
 #include "storage/ducklake_variant_stats.hpp"
 #include "common/ducklake_util.hpp"
@@ -2095,15 +2100,26 @@ vector<DuckLakeCompactionFileEntry> DuckLakeMetadataManager::GetFilesForCompacti
 		// metadata-only inlined file deletions as rewrite candidates.
 		deletion_threshold_clause = " AND data.end_snapshot is null";
 	}
-	// Add file size filtering for MERGE_ADJACENT_TABLES compaction
-	string file_size_filter_clause;
+	// Add file filtering for MERGE_ADJACENT_TABLES compaction
+	string file_filter_clause;
 	if (type == CompactionType::MERGE_ADJACENT_TABLES) {
 		if (options.min_file_size.IsValid()) {
-			file_size_filter_clause +=
+			file_filter_clause +=
 			    StringUtil::Format(" AND data.file_size_bytes >= %llu", options.min_file_size.GetIndex());
 		}
-		file_size_filter_clause += StringUtil::Format(" AND data.file_size_bytes < %llu", effective_max_file_size);
-		file_size_filter_clause += " AND data.end_snapshot IS NULL";
+		file_filter_clause += StringUtil::Format(" AND data.file_size_bytes < %llu", effective_max_file_size);
+		file_filter_clause += " AND data.end_snapshot IS NULL";
+		if (!options.newer_than.IsNull()) {
+			// only consider files written at or after this timestamp - the timestamp is mapped to the first
+			// snapshot created at or after it, and files are filtered on their begin_snapshot
+			auto newer_than = options.newer_than.GetValue<timestamp_tz_t>();
+			auto timestamp_filter = DuckLakeTableFunctionUtil::FormatTimestampISO8601(timestamp_t(newer_than.value));
+			file_filter_clause +=
+			    StringUtil::Format(" AND data.begin_snapshot >= (SELECT COALESCE(MIN(snapshot_id), "
+			                       "9223372036854775807) FROM {METADATA_CATALOG}.ducklake_snapshot WHERE "
+			                       "snapshot_time::TIMESTAMPTZ >= '%s')",
+			                       timestamp_filter);
+		}
 	}
 	auto query = StringUtil::Format(R"(
 WITH snapshot_ranges AS (
@@ -2136,8 +2152,13 @@ WHERE data.table_id=%d %s%s
 ORDER BY data.begin_snapshot, data.row_id_start, data.data_file_id, del.begin_snapshot
 		)",
 	                                table_id.index, select_list, table_id.index, table_id.index,
+<<<<<<< HEAD
 	                                deletion_threshold_clause, file_size_filter_clause);
 	auto result = transaction.Query(query);
+=======
+	                                deletion_threshold_clause, file_filter_clause);
+	auto result = Query(query);
+>>>>>>> 4ab9b124 (Add newer_than option to ducklake_merge_adjacent_files)
 	if (result->HasError()) {
 		result->GetErrorObject().Throw("Failed to get compaction file list from DuckLake: ");
 	}
