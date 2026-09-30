@@ -1,9 +1,5 @@
 #include "storage/ducklake_metadata_manager.hpp"
-<<<<<<< HEAD
-=======
-#include "duckdb/common/file_system.hpp"
 #include "functions/ducklake_table_functions.hpp"
->>>>>>> 4ab9b124 (Add newer_than option to ducklake_merge_adjacent_files)
 #include "storage/ducklake_transaction.hpp"
 #include "storage/ducklake_variant_stats.hpp"
 #include "common/ducklake_util.hpp"
@@ -2152,13 +2148,8 @@ WHERE data.table_id=%d %s%s
 ORDER BY data.begin_snapshot, data.row_id_start, data.data_file_id, del.begin_snapshot
 		)",
 	                                table_id.index, select_list, table_id.index, table_id.index,
-<<<<<<< HEAD
-	                                deletion_threshold_clause, file_size_filter_clause);
-	auto result = transaction.Query(query);
-=======
 	                                deletion_threshold_clause, file_filter_clause);
-	auto result = Query(query);
->>>>>>> 4ab9b124 (Add newer_than option to ducklake_merge_adjacent_files)
+	auto result = transaction.Query(query);
 	if (result->HasError()) {
 		result->GetErrorObject().Throw("Failed to get compaction file list from DuckLake: ");
 	}
