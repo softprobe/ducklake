@@ -1,0 +1,58 @@
+name: Build DuckLake extension for thelake
+
+on:
+  push:
+    branches: [thelake/duckdb-v2.0.0]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v2.0-cyanoptera
+    with:
+      extension_name: ducklake
+      duckdb_version: v2.0.0
+      ci_tools_version: v2.0-cyanoptera
+      exclude_archs: linux_arm64;linux_amd64_musl;linux_arm64_musl;osx_amd64;windows_amd64;windows_arm64;windows_amd64_mingw;wasm_mvp;wasm_eh
+      build_duckdb_shell: false
+      reduced_ci_mode: disabled
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download platform builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ducklake-v2.0.0-extension-*
+          path: artifacts
+      - name: Package and publish immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir release
+          for platform in linux_amd64 osx_arm64; do
+            artifact="artifacts/ducklake-v2.0.0-extension-${platform}/ducklake.duckdb_extension"
+            test -s "$artifact"
+            mkdir -p "release/${platform}"
+            cp "$artifact" "release/${platform}/ducklake.duckdb_extension"
+            sha256sum "release/${platform}/ducklake.duckdb_extension" > "release/${platform}/SHA256SUMS"
+            cat > "release/${platform}/BUILD.txt" <<EOF_META
+          duckdb_version=v2.0.0
+          ducklake_source=${GITHUB_SHA}
+          platform=${platform}
+          artifact=ducklake.duckdb_extension
+          EOF_META
+            tar -C release -czf "ducklake-v2.0.0-${platform}.tar.gz" "${platform}"
+          done
+          tag="duckdb-v2.0.0-${GITHUB_SHA:0:12}"
+          gh release create "$tag" \
+            "ducklake-v2.0.0-linux_amd64.tar.gz" \
+            "ducklake-v2.0.0-osx_arm64.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "DuckLake for DuckDB v2.0.0 (${GITHUB_SHA:0:12})" \
+            --notes "Built from duckdb/ducklake v2.0-cyanoptera (includes duckdb/ducklake#1824 for Postgres TIMESTAMP_NS pruning) by DuckDB extension-ci-tools."
